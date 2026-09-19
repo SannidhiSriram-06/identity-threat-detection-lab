@@ -1,0 +1,7 @@
+aws_region          = "us-east-1"
+project_name        = "identity-threat-lab"
+environment         = "lab"
+instance_type       = "t3.large"
+root_volume_size    = 40
+ssh_key_name        = ""            # e.g., "my-aws-key" (leave blank to rely on SSM Session Manager)
+allowed_cidr_blocks = ["0.0.0.0/0"] # Restrict to your external IP in production: ["x.x.x.x/32"]
