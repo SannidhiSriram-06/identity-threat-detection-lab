@@ -31,8 +31,7 @@
   <!-- 2. Privilege Escalation Detection (MITRE ATT&CK T1548: Abuse Elevation)  -->
   <!-- ======================================================================== -->
   <rule id="100200" level="7">
-    <if_sid>5401,5405</if_sid>
-    <match>FAILED su|NOT in sudoers|incorrect password attempt</match>
+    <if_sid>5401,5405,5406</if_sid>
     <description>Identity Lab Alert: Sudo authentication failure or unauthorized user attempted sudo execution</description>
     <mitre>
       <id>T1548.003</id>
