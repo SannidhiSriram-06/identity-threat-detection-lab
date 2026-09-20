@@ -1,0 +1,23 @@
+Sep 20 09:44:58 ip-10-50-1-109 sshd[7963]: Invalid user admin from 127.0.0.1 port 45966
+Sep 20 09:44:59 ip-10-50-1-109 sshd[7971]: Invalid user support from 127.0.0.1 port 45978
+Sep 20 09:45:00 ip-10-50-1-109 sshd[7975]: Invalid user deploy from 127.0.0.1 port 45982
+Sep 20 09:45:00 ip-10-50-1-109 sshd[7983]: Invalid user testuser from 127.0.0.1 port 46006
+Sep 20 09:45:01 ip-10-50-1-109 sshd[7987]: Invalid user operator from 127.0.0.1 port 46010
+Sep 20 09:45:01 ip-10-50-1-109 sshd[7991]: Invalid user guest from 127.0.0.1 port 46024
+Sep 20 09:45:02 ip-10-50-1-109 sshd[7995]: Invalid user developer from 127.0.0.1 port 46034
+Sep 20 09:45:02 ip-10-50-1-109 sshd[7999]: Invalid user contractor from 127.0.0.1 port 46044
+Sep 20 09:45:03 ip-10-50-1-109 sshd[8003]: Invalid user sysadmin from 127.0.0.1 port 41968
+Sep 20 09:45:03 ip-10-50-1-109 sshd[8007]: Invalid user oracle from 127.0.0.1 port 41978
+Sep 20 09:45:04 ip-10-50-1-109 sshd[8011]: Invalid user postgres from 127.0.0.1 port 41990
+Sep 20 09:45:04 ip-10-50-1-109 sshd[8015]: Invalid user service from 127.0.0.1 port 42002
+Sep 20 09:45:05 ip-10-50-1-109 sshd[8019]: Invalid user git from 127.0.0.1 port 42018
+Sep 20 09:45:12 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:45:15 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:45:17 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:45:20 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:45:56 ip-10-50-1-109 sudo:   ubuntu : TTY=pts/2 ; PWD=/opt/identity-lab ; USER=root ; COMMAND=/usr/bin/grep -E 'Invalid user|NOT in sudoers' /var/log/auth.log
+Sep 20 09:57:24 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:57:26 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:57:28 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 09:57:31 ip-10-50-1-109 sudo: lab_contractor : command not allowed ; PWD=/home/lab_contractor ; USER=root ; COMMAND=list
+Sep 20 11:27:30 ip-10-50-1-109 sudo:   ubuntu : PWD=/home/ubuntu ; USER=root ; COMMAND=/usr/bin/grep -E 'Invalid user|NOT in sudoers|command not allowed' /var/log/auth.log

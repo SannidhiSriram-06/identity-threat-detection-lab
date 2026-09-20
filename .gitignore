@@ -5,6 +5,12 @@ crash.log
 crash.*.log
 *.tfvars
 !*.tfvars.example
+
+# Terraform plans (can embed account/resource IDs)
+tfplan
+*.tfplan
+destroy.tfplan
+
 .terraform/
 .terraform.lock.hcl
 override.tf
@@ -32,6 +38,22 @@ docker/config/wazuh_indexer_ssl_certs/
 docker/config/wazuh_cluster/wazuh_manager.conf
 lab.env
 expiry-test.txt
+
+# AI tool config and stale local planning notes (kept locally, not published)
+AGENTS.md
+CLAUDE.md
+docs/context.md
+docs/PRD.md
+docs/TECHSPEC.md
+docs/APPFLOW.md
+docs/DESIGN.md
+docs/SCHEMA.md
+docs/IMPLEMENTATIONPLAN.md
+docs/TRACKER.md
+docs/RULES.md
+
+# Unredacted screenshot bundle at repo root (the redacted copy lives in docs/screenshots/)
+/AWS_Deployment.pdf
 
 # OS files
 .DS_Store
