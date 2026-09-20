@@ -1,193 +1,154 @@
-# Identity Threat Detection & Incident Response Lab
+# Identity Threat Detection & Response Lab (Vault + Wazuh on AWS)
 
-[![Terraform](https://img.shields.io/badge/IaC-Terraform_v1.5+-623CE4?logo=terraform&logoColor=white)](https://www.terraform.io/)
-[![HashiCorp Vault](https://img.shields.io/badge/Vault-Community_Edition-000000?logo=vault&logoColor=white)](https://www.vaultproject.io/)
-[![Wazuh SIEM](https://img.shields.io/badge/SIEM-Wazuh_v4.7-0052CC?logo=wazuh&logoColor=white)](https://wazuh.com/)
-[![MITRE ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK_Enterprise-D32F2F)](docs/MITRE_ATTCK_MAPPINGS.md)
+An end-to-end identity security and threat detection engineering lab running HashiCorp Vault Community Edition and a single-node Wazuh SIEM stack on AWS. The lab demonstrates dynamic Just-In-Time (JIT) AWS IAM credential brokering, host and cloud threat telemetry ingestion, and automated SOC incident response mapped to the MITRE ATT&CK framework.
 
-An end-to-end cloud identity security and threat detection engineering lab. Provisions dedicated AWS infrastructure using **Terraform**, runs **HashiCorp Vault (Community Edition)** for dynamic, short-lived Just-In-Time (JIT) AWS IAM credentials, deploys a single-node **Wazuh SIEM stack** ingesting host telemetry and **AWS CloudTrail** logs, executes automated threat simulations (SSH brute-force, Linux privilege escalation), and includes a professional **Incident Response Runbook** mapped to the **MITRE ATT&CK®** framework.
-
----
-
-## 🏛️ Architecture Overview
+## Architecture
 
 ```mermaid
 flowchart TD
-    subgraph "AWS Infrastructure (Terraform Managed)"
-        VPC["Lab VPC (10.50.0.0/16)"]
-        EC2["EC2 Lab Host<br/>(Ubuntu 22.04 LTS, t3.large, 40GB EBS)"]
-        IAM_PROF["EC2 Instance Profile<br/>(STS AssumeRole & CloudTrail Read)"]
-        TRAIL["AWS CloudTrail<br/>(API & Identity Auditing)"]
+    subgraph AWS["AWS Cloud (us-east-1)"]
+        CT["AWS CloudTrail"] -->|"S3 Event Delivery (5-15 min)"| S3["S3 Bucket (CloudTrail logs)"]
+        ROLE["EC2 Instance Role<br/>(IMDSv2 Hop Limit 2)"] -.->|"Fallback Auth"| VAULT
+
+        subgraph EC2["Lab Host: t3.large (Ubuntu 22.04)"]
+            subgraph DOCKER["Docker Compose Stack"]
+                VAULT["HashiCorp Vault 1.15 CE<br/>(AWS Secrets Engine: 8200)"]
+                W_MGR["Wazuh Manager 4.7.5<br/>(Rules Engine, CloudTrail Wodle)"]
+                W_IDX["Wazuh Indexer 4.7.5<br/>(OpenSearch Engine: 9200)"]
+                W_DASH["Wazuh Dashboard 4.7.5<br/>(HTTPS Web UI: 443)"]
+            end
+
+            HOST_LOGS["/var/log/auth.log"] -->|"Read-only Bind Mount"| W_MGR
+            SIM["Simulations<br/>(SSH Spray, Sudo Abuse, JIT Test)"] -->|"Host Activity"| HOST_LOGS
+            SIM -->|"JIT Requests"| VAULT
+        end
+
+        S3 -->|"aws-s3 Wodle (5 min poll)"| W_MGR
+        VAULT -->|"IAM CreateUser / CreateAccessKey"| IAM["AWS IAM<br/>(Dynamic 15m Leases)"]
+        IAM -->|"API events"| CT
     end
-
-    EC2 --- IAM_PROF
-    TRAIL -.->|"API Events"| W_MGR
-
-    subgraph "Docker Stack (Running on EC2)"
-        VAULT["HashiCorp Vault (CE)<br/>(Port 8200: AWS Secrets Engine)"]
-        W_IDX["Wazuh Indexer<br/>(OpenSearch Engine: 9200)"]
-        W_MGR["Wazuh Manager<br/>(Detection Rules & CloudTrail Wodle)"]
-        W_DASH["Wazuh Dashboard<br/>(Port 443 / 5601 HTTPS)"]
-    end
-
-    VAULT -->|"Issues Ephemeral 15-min IAM Creds"| EC2
-    W_IDX --- W_MGR
-    W_MGR --- W_DASH
-
-    subgraph "Adversary Simulations & Detections"
-        ATTK1["SSH Brute-Force<br/>(MITRE T1110.001)"]
-        ATTK2["Privilege Escalation<br/>(MITRE T1548.003 / Sudo Abuse)"]
-        ATTK3["JIT Credential Revocation<br/>(Zero Standing Privileges)"]
-    end
-
-    ATTK1 -->|"Auth Logs"| W_MGR
-    ATTK2 -->|"Syslog & FIM"| W_MGR
-    ATTK3 -->|"Dynamic Lease Event"| VAULT
-
-    W_MGR -->|"Alerts Triggered"| W_DASH
 ```
 
----
+## What Was Built and Verified
 
-## ⚡ Key Highlights & Security Value
+| Component | Technology | Role in Lab | Verification Status |
+| :--- | :--- | :--- | :--- |
+| **Infrastructure as Code** | Terraform | Single t3.large host, VPC, S3, CloudTrail, IAM instance profile, locked Security Group | Verified: terraform apply created 16 resources; terraform destroy removed 16 and post-destroy checks found nothing left |
+| **Identity Brokering** | HashiCorp Vault 1.15 Community | Dynamic IAM user generation via AWS secrets engine (`credential_type=iam_user`) | Verified: dev-jit-role issued 900s leases; explicit revoke deleted the IAM user; an unrevoked lease's IAM user was auto-deleted by Vault after 15 minutes; a dev-policy token was denied on secops-jit-role (secops-jit-role was only tested for that denial; no credentials were issued from it) |
+| **SIEM & Detection Engine** | Wazuh 4.7.5 Single-Node | Ingests `/var/log/auth.log` via bind mount and CloudTrail via `aws-s3` wodle | Verified: 33 custom alerts generated across 5 rules |
+| **Host Log Ingestion** | Linux Syslog (`auth.log`) | Real-time SSH and sudo telemetry parsed directly by Wazuh Manager (`agent 000`) | Verified: 10 single SSH-failure alerts and 3 composite brute-force alerts (100100/100101); 3 single sudo-violation alerts and 1 composite escalation alert (100200/100201) |
+| **Cloud Telemetry** | AWS CloudTrail + S3 | Cloud IAM management plane auditing ingested periodically by Wazuh wodle | Verified: 16 CloudTrail `CreateUser`/`CreateAccessKey` alerts (Rule 100300) |
+| **Incident Response** | Markdown Runbook | Actionable SOC containment procedures for brute force, sudo abuse, and IAM alerts | Written to fit one page (about 400 words); commands were not executed against the live alerts |
 
-1. **Zero Standing Privileges with HashiCorp Vault:**  
-   Eliminates permanent developer IAM access keys. Vault dynamically provisions temporary IAM users or assumed-role credentials with an enforceable 15-minute lease, automatically revoking credentials upon expiration.
-2. **Wazuh SIEM & Detection Engineering:**  
-   Custom rules detect unauthorized sudo escalation, suspicious `/etc/shadow` reads, rapid SSH brute-forcing, and anomalous CloudTrail IAM activities.
-3. **MITRE ATT&CK Alignment:**  
-   Every detection rule, log source, and attack simulation maps directly to MITRE ATT&CK enterprise tactics and techniques.
-4. **Actionable Incident Response Runbook:**  
-   One-page operational runbook for SOC analysts following NIST SP 800-61 Rev. 2 guidelines (Detection, Containment, Eradication, Post-Mortem).
+## How to Run
 
----
-
-## 🚀 Setup & Deployment Instructions
-
-### Prerequisites
-- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) installed and configured with appropriate administrator access.
-- [Terraform >= 1.5.0](https://www.terraform.io/downloads.html).
-- SSH client (or AWS Session Manager plugin).
-
-### Step 1: Clone Repository
+### 1. Prerequisites and Configuration
+Ensure AWS CLI v2 and Terraform >= 1.5 are installed locally. Find your current public IP address:
 ```bash
-git clone https://github.com/SannidhiSriram-06/identity-threat-detection-lab.git
-cd identity-threat-detection-lab
+curl -s https://checkip.amazonaws.com
 ```
 
-### Step 2: Deploy Infrastructure via Terraform
+Generate an SSH key pair for the lab:
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/itdl-lab -N ""
+```
+
+Create `terraform/terraform.tfvars`:
+```hcl
+allowed_cidr_blocks = ["<YOUR_PUBLIC_IP>/32"]
+```
+Note: The AWS region (`us-east-1`), SSH public key path (`~/.ssh/itdl-lab.pub`), and max runtime (`max_runtime_minutes = 300`) have preconfigured defaults in `variables.tf`.
+
+### 2. Provision Infrastructure
 ```bash
 cd terraform
-cp terraform.tfvars.example terraform.tfvars
-
-# Set your SSH key name (optional) and region if different from us-east-1
 terraform init
-terraform plan
-terraform apply -auto-approve
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
+Note the output `ec2_public_ip`, `vault_ui_url`, and `wazuh_dashboard_url`.
 
-Terraform outputs the EC2 Public IP and connection commands:
-- `ec2_public_ip`: Public IP of the lab host
-- `vault_ui_url`: Web UI URL for Vault (`http://<IP>:8200`)
-- `wazuh_dashboard_url`: Web UI URL for Wazuh (`https://<IP>:443`)
-
-### Step 3: Connect to the Lab Host & Start the Docker Stack
-Connect via SSH or AWS SSM:
+### 3. Wait for Cloud-Init and Connect
+Cloud-init provisions Docker, pulls images, mounts swap, and sets security controls (~8-10 minutes):
 ```bash
-ssh -i <your-key.pem> ubuntu@<EC2_PUBLIC_IP>
-# OR via AWS SSM:
-# aws ssm start-session --target <INSTANCE_ID>
+ssh -i ~/.ssh/itdl-lab ubuntu@<EC2_PUBLIC_IP>
+cloud-init status --wait
 ```
-
-Navigate to the lab directory and start Vault & Wazuh:
+Wait until cloud-init finishes. Run the verification script:
 ```bash
-# Clone the repository onto the instance or sync docker/
-cd /opt/identity-lab
-git clone https://github.com/SannidhiSriram-06/identity-threat-detection-lab.git .
-
-# Start Docker containers
-cd docker
-docker compose up -d
+sudo bash /opt/identity-lab/scripts/verify_stack.sh
 ```
 
-Verify containers are running:
+> [!NOTE]
+> **First-boot quirk**: The first `docker compose up` can fail with `"failed to bind host port 0.0.0.0:55000: address already in use"` (transient; the exact cause was not confirmed, most likely the ephemeral port range). Symptom: `wazuh-manager` is stuck in Created state or shows an empty PORTS column, the dashboard says "No API available to connect", and bootstrap stops early. Fix: `sudo sysctl -w net.ipv4.ip_local_reserved_ports=55000`, then from `/opt/identity-lab/docker` run `sudo docker compose up -d --force-recreate wazuh.manager`.
+
+### 4. Initialize Vault and AWS Secrets Engine
+Initialize Vault and configure the dynamic IAM secrets engine from the host:
 ```bash
-docker compose ps
+sudo bash /opt/identity-lab/docker/vault/scripts/init_vault_aws.sh
 ```
+This enables the AWS secrets engine, sets lease TTLs (`lease=15m lease_max=1h`), and creates `dev-jit-role` and `secops-jit-role`.
 
-### Step 4: Initialize HashiCorp Vault AWS Secrets Engine
-Run the automated initialization script to initialize Vault, unseal it, enable the AWS secrets engine, and configure the dynamic 15-minute IAM role:
-```bash
-docker exec -i vault-identity-lab bash /vault/scripts/init_vault_aws.sh
-```
-
----
-
-## 🎯 Attack Simulations & Detection Demos
-
-All simulations are automated in the `simulations/` directory:
-
-### Simulation 1: SSH Brute-Force Attack
-Simulates a rapid dictionary credential spray against port 22:
+### 5. Execute Attack Simulations
+Run the automated threat simulations on the host:
 ```bash
 cd /opt/identity-lab/simulations
+
+# Simulation 1: SSH Username Spray (15 invalid user attempts)
 ./simulate_ssh_bruteforce.sh 127.0.0.1 22 15
-```
-**Detection & Outcome:**
-- **Wazuh Rule:** `100101` (Severity Level 10: *Possible SSH Brute Force Attack detected*)
-- **MITRE ATT&CK:** [T1110.001 (Password Guessing)](docs/MITRE_ATTCK_MAPPINGS.md#1-t1110001--t1110003---brute-force-password-guessing--spraying)
-- Verify in host logs: `sudo tail -n 20 /var/log/auth.log`
 
-### Simulation 2: Linux Privilege Escalation & Sudo Abuse
-Creates an unprivileged user (`lab_contractor`) attempting unauthorized `sudo` commands and sensitive `/etc/shadow` dumps:
-```bash
+# Simulation 2: Linux Privilege Escalation (4 unauthorized sudo commands)
 ./simulate_priv_esc.sh
-```
-**Detection & Outcome:**
-- **Wazuh Rules:** `100200` (Sudo auth failure / not in sudoers), `100201` (Multiple privilege escalation attempts), `100202` (Sensitive file access)
-- **MITRE ATT&CK:** [T1548.003 (Sudo Abuse)](docs/MITRE_ATTCK_MAPPINGS.md#2-t1548003---abuse-elevation-control-mechanism-sudo-and-sudo-caching)
 
-### Simulation 3: Dynamic JIT Credential Request & Auditing
-Requests ephemeral AWS IAM credentials through Vault, tests the credentials against AWS STS, and demonstrates automatic revocation:
+# Simulation 3: Dynamic JIT Credential Request and Validation
+sudo ./simulate_vault_jit_access.sh
+
+# Dynamic JIT Expiry Verification
+sudo ./simulate_vault_jit_access.sh --leave-unrevoked
+# Wait 15+ minutes for lease expiration
+sudo ./verify_expiry.sh
+```
+
+Check alert output in Wazuh:
 ```bash
-./simulate_vault_jit_access.sh
-```
-**Detection & Outcome:**
-- Validates the principle of **Zero Standing Privileges**.
-- CloudTrail records dynamic IAM creation, temporary usage, and lease termination.
-
-### Cleanup Simulation Artifacts
-```bash
-./cleanup_simulations.sh
+sudo docker exec wazuh-manager grep -E '"id":"(100100|100101|100200|100201|100300)"' /var/ossec/logs/alerts/alerts.json
 ```
 
----
-
-## 📖 Runbooks & Mappings
-
-- 📑 **Incident Response Runbook:** Comprehensive detection, containment, and eradication procedures in [`docs/INCIDENT_RESPONSE_RUNBOOK.md`](docs/INCIDENT_RESPONSE_RUNBOOK.md).
-- 🗺️ **MITRE ATT&CK Mapping:** Detailed technique crosswalk in [`docs/MITRE_ATTCK_MAPPINGS.md`](docs/MITRE_ATTCK_MAPPINGS.md).
-
----
-
-## 💰 Cost & Cleanup
-
-### Software Licensing Cost
-- **HashiCorp Vault Community Edition (CE):** Free & Open-Source / BSL.
-- **Wazuh SIEM:** 100% Free & Open-Source (GPLv2).
-- **Docker CE:** Free & Open-Source.
-
-### AWS Cloud Costs
-- The only recurring cost is the **EC2 instance (`t3.large`)** and its EBS volume (~$0.0832/hr in `us-east-1`).
-- Running this lab for a 3-hour evaluation will cost approximately **~$0.25 to $0.35 USD**.
-
-### 🧹 Teardown Instructions
-To avoid ongoing AWS compute charges, terminate the lab infrastructure as soon as your testing is concluded:
-
+### 6. Teardown
+To avoid unnecessary AWS charges, destroy all infrastructure immediately after testing:
 ```bash
 cd terraform
 terraform destroy -auto-approve
 ```
 
-> [!TIP]
-> Always verify with `aws ec2 describe-instances --filters "Name=tag:Lab,Values=Identity-Threat-Detection"` that the instance state is `terminated`.
+## Cost Breakdown
+
+Estimated from runtime x hourly rate; not yet confirmed in AWS Cost Explorer. Compute: one t3.large at $0.0832/hour for about 2h25m, roughly $0.20. Storage (40 GB gp3), CloudTrail and S3 added a few cents at most. t3.large is not free-tier eligible, and the Wazuh stack needs several GB of RAM (the indexer alone used about 1.3 GiB in this run). A dead-man switch (max_runtime_minutes, default 300, terminate-on-shutdown) terminates the instance if it is forgotten. Destroy as soon as testing ends.
+
+## MITRE ATT&CK Mapping Summary
+
+| Rule ID | Level | Tactic | Technique | Name | Live Alerts |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **100100** | 5 | Credential Access | T1110.001 | Password Guessing | 10 |
+| **100101** | 10 | Credential Access | T1110.001 / T1110.003 | Password Guessing & Spraying | 3 |
+| **100200** | 7 | Privilege Escalation | T1548.003 / T1078 | Sudo and Sudo Caching | 3 |
+| **100201** | 12 | Privilege Escalation | T1548.003 | Sudo Abuse Escalation | 1 |
+| **100300** | 8 | Persistence | T1078.004 / T1098 | Account Manipulation / IAM Creation | 16 |
+
+See [`docs/MITRE_ATTCK_MAPPINGS.md`](docs/MITRE_ATTCK_MAPPINGS.md) for full technique breakdowns, parent rule inheritance, and observed built-in rules.
+
+## Limitations and Honest Engineering Notes
+
+1. **Single-Node Deployment**: Wazuh Indexer, Manager, and Dashboard run on a single host. In enterprise production, Indexer and Manager should be clustered across multi-AZ instances.
+2. **Localhost Ingestion**: The Wazuh Manager reads `/var/log/auth.log` directly via a read-only bind mount rather than deploying a standalone Wazuh Agent. Telemetry displays agent ID `000` (`wazuh.manager`).
+3. **Simulation Source**: SSH brute-force and sudo abuse attacks originated from `127.0.0.1` and a local test user (`lab_contractor`) to maintain an isolated, self-contained test environment.
+4. **CloudTrail Latency**: AWS CloudTrail log delivery to S3 typically takes 5-15 minutes, and the Wazuh `aws-s3` wodle polls on a 5-minute interval. CloudTrail alerts are not instantaneous.
+5. **Vault IAM Generation Detection**: Wazuh Rule `100300` fires on any `CreateUser` or `CreateAccessKey` event, which includes legitimate credentials created by HashiCorp Vault. In production, Vault's IAM principal must be allowlisted to reduce alert fatigue.
+6. **Lab-only credentials and secrets handling**: Wazuh uses upstream default credentials; Vault is initialised with a single key share and its unseal key and root token are stored in /opt/identity-lab/vault-init.json on the host; the Vault listener is plain HTTP. Access was limited by a /32 security group.
+7. **AI-Assisted Authoring**: Stack automation, rule definitions, and documentation were developed with AI pair-programming tools and validated live on AWS.
+
+## Evidence
+
+Sanitized, redacted live evidence files captured directly from the deployed lab:
+- [`docs/evidence/wazuh-alerts.json`](docs/evidence/wazuh-alerts.json): Raw NDJSON alerts from Wazuh Manager covering all 33 custom rule triggers.
+- [`docs/evidence/auth-log-excerpt.txt`](docs/evidence/auth-log-excerpt.txt): Linux `/var/log/auth.log` excerpt capturing SSH username spray and sudo command violations.

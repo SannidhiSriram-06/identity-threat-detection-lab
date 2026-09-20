@@ -1,122 +1,56 @@
-# Incident Response Runbook: Identity & Host Threat Scenarios
+# Incident Response Runbook
 
-> **Classification:** Operational Incident Response Standard Operating Procedure (SOP)  
-> **Target Systems:** Linux EC2 Hosts, HashiCorp Vault JIT Engine, AWS CloudTrail / IAM  
-> **Relevant Regulations / Frameworks:** NIST SP 800-61 Rev. 2, ISO 27001 A.5.24 - A.5.28  
+## Scenario 1: SSH Failed-Login Spray (Alert 100101)
 
----
+### Detect
+- Alert 100101 triggers at Level 10 when 5 or more authentication failures occur from one source within 60s.
+- Inspect `/var/log/auth.log` for invalid usernames and source IP addresses.
+- Verify active connections with `ss -tna '( dport = :22 )'`.
 
-## 🧭 Incident Response Workflow (NIST SP 800-61)
+### Contain
+- Block the attacking source IP at host level with `iptables -I INPUT -s <IP> -p tcp --dport 22 -j DROP`.
+- Restrict AWS security group port 22 ingress to trusted administrator CIDRs.
+- Terminate any active sessions established by the offending source IP.
 
-```mermaid
-flowchart LR
-    D[1. Detection & Analysis] --> C[2. Containment]
-    C --> E[3. Eradication & Remediation]
-    E --> R[4. Post-Incident Review]
-```
-
----
-
-## Scenario A: SSH Brute-Force Attack (MITRE T1110.001)
-
-### 1. Detection & Verification
-- **Primary Alert:** Wazuh Alert `100101` (Severity Level 10: *Possible SSH Brute Force Attack detected*).
-- **Triage Verification:**
-  ```bash
-  # Check recent failed authentication attempts and attacking IPs
-  sudo grep "Failed password" /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -nr
-  # Verify current active SSH connections
-  ss -tna '( dport = :22 or sport = :22 )'
-  ```
-
-### 2. Immediate Containment
-- **Host Firewall Block:**
-  ```bash
-  ATTACKER_IP="<identified_ip>"
-  sudo iptables -I INPUT -s "${ATTACKER_IP}" -p tcp --dport 22 -j DROP
-  ```
-- **AWS Security Group Isolation:** Remove `0.0.0.0/0` ingress on port 22 immediately from the instance's Security Group via AWS Console or CLI:
-  ```bash
-  aws ec2 revoke-security-group-ingress --group-id <SG_ID> --protocol tcp --port 22 --cidr 0.0.0.0/0
-  ```
-
-### 3. Eradication & Remediation
-1. **Disable Password Authentication:** Enforce SSH key-only access or AWS SSM Session Manager:
-   ```bash
-   sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-   sudo systemctl restart sshd
-   ```
-2. **Deploy Fail2Ban Active Response:** Ensure fail2ban jail is enabled for `sshd` with automatic IP banning.
+### Eradicate
+- Confirm password authentication remains disabled in `/etc/ssh/sshd_config`.
+- Inspect `~/.ssh/authorized_keys` across local accounts for unauthorized keys.
+- Rotate administrative SSH key pairs if any account was compromised.
 
 ---
 
-## Scenario B: Linux Privilege Escalation & Sudo Abuse (MITRE T1548.003)
+## Scenario 2: Repeated Sudo Violations (Alert 100201)
 
-### 1. Detection & Verification
-- **Primary Alert:** Wazuh Alert `100201` (Severity Level 12: *Multiple Privilege Escalation attempts detected*).
-- **Triage Verification:**
-  ```bash
-  # Inspect sudo failure logs
-  sudo journalctl -u sudo --since "1 hour ago" | grep -E "NOT in sudoers|authentication failure"
-  # Check active user processes and cron jobs
-  ps -u <suspicious_user> -f
-  crontab -u <suspicious_user> -l
-  ```
+### Detect
+- Alert 100201 triggers at Level 12 when 3 or more sudo violations occur within 60s.
+- Inspect `/var/log/auth.log` for rejected commands and unauthorized user attempts.
+- Identify the offending account and active processes with `ps -u <user> -f`.
 
-### 2. Immediate Containment
-- **Lock Compromised User Account:**
-  ```bash
-  TARGET_USER="<compromised_username>"
-  sudo passwd -l "${TARGET_USER}"
-  # Terminate all active sessions for the user
-  sudo pkill -KILL -u "${TARGET_USER}"
-  ```
-- **Audit Sudoers Configuration:**
-  ```bash
-  sudo visudo -c
-  ls -la /etc/sudoers.d/
-  ```
+### Contain
+- Immediately lock the offending user account using `passwd -l <user>`.
+- Terminate all user processes with `pkill -KILL -u <user>`.
+- Isolate the host from internal networks if unauthorized binaries were executed.
 
-### 3. Eradication & Remediation
-1. Inspect file integrity: Verify that no unauthorized SUID binaries were placed (`find / -perm -4000 -type f`).
-2. Verify `/etc/passwd` and `/etc/shadow` checksums with Wazuh Syscheck / FIM database.
-3. Review user access authorization under least-privilege principles (RBAC).
+### Eradicate
+- Audit `/etc/sudoers` and `/etc/sudoers.d/` for unauthorized privileges or syntax tampering.
+- Search for unauthorized setuid binaries using `find / -perm -4000 -type f`.
+- Remove unauthorized or temporary user accounts created during the incident.
 
 ---
 
-## Scenario C: AWS IAM Credential Compromise & Unauthorized Cloud Activity (MITRE T1078.004)
+## Scenario 3: Unexpected IAM User or Key Creation (Alert 100300)
 
-### 1. Detection & Verification
-- **Primary Alert:** Wazuh Alert `100300` (`CreateAccessKey` without ticket) or `100301` (`ConsoleLogin` without MFA).
-- **Triage Verification:**
-  ```bash
-  # Inspect CloudTrail events for suspicious API calls
-  aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=CreateAccessKey --max-items 5
-  ```
+### Detect
+- Alert 100300 triggers at Level 8 on CloudTrail `CreateUser` or `CreateAccessKey` events.
+- Query CloudTrail event history to identify the requesting principal and source IP.
+- Check if created IAM entities match expected dynamic patterns like `vault-*`.
 
-### 2. Immediate Containment
-- **Revoke Compromised AWS Credentials:**
-  ```bash
-  aws iam update-access-key --user-name <username> --access-key-id <key_id> --status Inactive
-  # Or delete the key
-  aws iam delete-access-key --user-name <username> --access-key-id <key_id>
-  ```
-- **If generated through HashiCorp Vault:** Instantly revoke the entire lease tree:
-  ```bash
-  vault lease revoke -prefix aws/creds/
-  ```
-- **Attach Explicit Deny Policy:**
-  ```bash
-  aws iam put-user-policy --user-name <username> --policy-name QuarantineDenyAll --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"*","Resource":"*"}]}'
-  ```
+### Contain
+- Deactivate the access key with `aws iam update-access-key --user-name <user> --access-key-id <key-id> --status Inactive`.
+- If generated via Vault, revoke the active lease tree with `vault lease revoke -prefix aws/creds/`.
+- Attach an inline deny policy to the IAM user to block all further actions.
 
-### 3. Remediation & Long-Term Prevention
-1. **Transition to Just-In-Time (JIT) Credentials:** Eliminate permanent developer IAM user keys in favor of HashiCorp Vault AWS Secrets Engine short-lived STS tokens (15-minute lease).
-2. **Enforce Mandatory Multi-Factor Authentication (MFA):** Restrict all IAM console logins with condition `aws:MultiFactorAuthPresent: "true"`.
-
----
-
-## 📞 Escalation & Contact Checklist
-- **Security Operations Lead:** Incident Commander
-- **Cloud Infrastructure Team:** Cloud Administrator
-- **Compliance Officer:** Mandatory 72-hour breach SLA notification assessment (GDPR Art. 33 / SEC Cyber Rules)
+### Eradicate
+- Delete the unauthorized IAM user, access keys, and policies via AWS CLI.
+- Rotate credentials of the compromised principal that provisioned the resources.
+- Review Vault audit logs and CloudTrail history to confirm eradication.
