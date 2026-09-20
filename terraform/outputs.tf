@@ -10,7 +10,7 @@ output "ec2_instance_id" {
 
 output "ssh_connection_command" {
   description = "SSH connection string to access the instance"
-  value       = "ssh -i <your-key.pem> ubuntu@${aws_instance.threat_lab_host.public_ip}"
+  value       = "ssh -i ~/.ssh/itdl-lab ubuntu@${aws_instance.threat_lab_host.public_ip}"
 }
 
 output "ssm_connect_command" {
@@ -26,4 +26,9 @@ output "vault_ui_url" {
 output "wazuh_dashboard_url" {
   description = "Wazuh Security Operations Dashboard URL"
   value       = "https://${aws_instance.threat_lab_host.public_ip}:443"
+}
+
+output "cloudtrail_bucket" {
+  description = "Name of the S3 bucket storing CloudTrail logs"
+  value       = aws_s3_bucket.trail.id
 }

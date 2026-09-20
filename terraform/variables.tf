@@ -1,24 +1,24 @@
 variable "aws_region" {
   description = "AWS region to deploy the lab"
-  type        = "string"
+  type        = string
   default     = "us-east-1"
 }
 
 variable "project_name" {
   description = "Name prefix for lab resources"
-  type        = "string"
+  type        = string
   default     = "identity-threat-lab"
 }
 
 variable "environment" {
   description = "Environment tag"
-  type        = "string"
+  type        = string
   default     = "lab"
 }
 
 variable "instance_type" {
-  description = "EC2 instance type (t3.large has 2 vCPUs and 8 GiB RAM required for Wazuh + Vault)"
-  type        = "string"
+  description = "EC2 instance type for running Vault and Wazuh SIEM stack"
+  type        = string
   default     = "t3.large"
 }
 
@@ -28,14 +28,20 @@ variable "root_volume_size" {
   default     = 40
 }
 
-variable "ssh_key_name" {
-  description = "Optional existing EC2 key pair name for SSH access. If left empty, SSH access can be done via EC2 Instance Connect or SSM Session Manager"
-  type        = "string"
-  default     = ""
+variable "ssh_public_key_path" {
+  description = "Local path to SSH public key used for EC2 key pair creation"
+  type        = string
+  default     = "~/.ssh/itdl-lab.pub"
+}
+
+variable "max_runtime_minutes" {
+  description = "Maximum runtime in minutes after boot before the EC2 host initiates termination"
+  type        = number
+  default     = 300
 }
 
 variable "allowed_cidr_blocks" {
-  description = "CIDR block permitted to access Vault, Wazuh dashboard, and SSH (Restrict to your IP in production)"
+  description = "CIDR blocks permitted to access Vault, Wazuh dashboard, and SSH"
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }

@@ -1,6 +1,6 @@
 <!--
   Custom Wazuh Rules for Identity & Host Threat Detection Lab
-  Rules mapped to MITRE ATT&CK: T1110, T1078, T1548, T1068
+  Rules mapped to MITRE ATT&CK: T1110, T1078, T1548, T1098
 -->
 <group name="identity_threat_lab,">
 
@@ -31,7 +31,7 @@
   <!-- 2. Privilege Escalation Detection (MITRE ATT&CK T1548: Abuse Elevation)  -->
   <!-- ======================================================================== -->
   <rule id="100200" level="7">
-    <if_sid>5402</if_sid>
+    <if_sid>5401,5405</if_sid>
     <match>FAILED su|NOT in sudoers|incorrect password attempt</match>
     <description>Identity Lab Alert: Sudo authentication failure or unauthorized user attempted sudo execution</description>
     <mitre>
@@ -50,38 +50,16 @@
     <group>privilege_escalation,attacks,</group>
   </rule>
 
-  <rule id="100202" level="10">
-    <if_sid>5400</if_sid>
-    <match>/etc/shadow|/etc/passwd|chmod +s|chown root</match>
-    <description>Identity Lab Alert: Suspicious file access or SUID permission modification attempted</description>
-    <mitre>
-      <id>T1548.001</id>
-      <id>T1003.008</id>
-    </mitre>
-    <group>privilege_escalation,file_integrity,</group>
-  </rule>
-
   <!-- ======================================================================== -->
   <!-- 3. AWS CloudTrail & Vault Identity Anomalies (MITRE ATT&CK T1078.004)    -->
   <!-- ======================================================================== -->
   <rule id="100300" level="8">
-    <if_sid>80200</if_sid>
+    <if_sid>80202</if_sid>
     <field name="aws.eventName">^CreateAccessKey$|^CreateUser$</field>
     <description>Identity Lab Alert: CloudTrail detected IAM User or Permanent Access Key creation</description>
     <mitre>
       <id>T1078.004</id>
       <id>T1098</id>
-    </mitre>
-    <group>aws_iam,cloudtrail,</group>
-  </rule>
-
-  <rule id="100301" level="9">
-    <if_sid>80200</if_sid>
-    <field name="aws.eventName">^ConsoleLogin$</field>
-    <field name="aws.additionalEventData.MFAUsed">^No$</field>
-    <description>Identity Lab Alert: AWS Management Console login succeeded without MFA</description>
-    <mitre>
-      <id>T1078.004</id>
     </mitre>
     <group>aws_iam,cloudtrail,</group>
   </rule>

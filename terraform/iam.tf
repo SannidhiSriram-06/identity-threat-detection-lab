@@ -34,31 +34,35 @@ resource "aws_iam_role_policy" "vault_and_wazuh_policy" {
         Sid    = "VaultDynamicIAMGeneration"
         Effect = "Allow"
         Action = [
-          "iam:CreateAccessKey",
-          "iam:DeleteAccessKey",
-          "iam:GetUser",
-          "iam:ListAccessKeys",
-          "iam:AttachUserPolicy",
-          "iam:DetachUserPolicy",
           "iam:CreateUser",
           "iam:DeleteUser",
+          "iam:GetUser",
+          "iam:CreateAccessKey",
+          "iam:DeleteAccessKey",
+          "iam:ListAccessKeys",
           "iam:PutUserPolicy",
           "iam:DeleteUserPolicy",
-          "sts:AssumeRole"
+          "iam:ListUserPolicies",
+          "iam:AttachUserPolicy",
+          "iam:DetachUserPolicy",
+          "iam:ListAttachedUserPolicies",
+          "iam:ListGroupsForUser",
+          "iam:AddUserToGroup",
+          "iam:RemoveUserFromGroup"
         ]
-        Resource = "*"
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/vault-*"
       },
       {
         Sid    = "WazuhCloudTrailIngestion"
         Effect = "Allow"
         Action = [
-          "cloudtrail:LookupEvents",
-          "cloudtrail:GetTrailStatus",
-          "cloudtrail:DescribeTrails",
-          "s3:GetObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetObject"
         ]
-        Resource = "*"
+        Resource = [
+          aws_s3_bucket.trail.arn,
+          "${aws_s3_bucket.trail.arn}/*"
+        ]
       }
     ]
   })

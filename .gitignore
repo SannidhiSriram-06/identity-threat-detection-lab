@@ -27,6 +27,12 @@ wazuh_indexer_data/
 wazuh_manager_data/
 vault_data/
 
+# Wazuh runtime certs and generated configs
+docker/config/wazuh_indexer_ssl_certs/
+docker/config/wazuh_cluster/wazuh_manager.conf
+lab.env
+expiry-test.txt
+
 # OS files
 .DS_Store
 Thumbs.db

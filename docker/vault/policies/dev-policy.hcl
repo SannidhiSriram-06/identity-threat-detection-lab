@@ -3,10 +3,6 @@ path "aws/creds/dev-jit-role" {
   capabilities = ["read"]
 }
 
-path "aws/sts/dev-jit-role" {
-  capabilities = ["read"]
-}
-
 # Allow token lookup & renewal
 path "auth/token/lookup-self" {
   capabilities = ["read"]
